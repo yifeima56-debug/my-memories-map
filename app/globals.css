@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Leaflet CSS */
+@import 'leaflet/dist/leaflet.css';
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+}
+
+/* Micro-animations */
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-5px) rotate(2deg); }
+  75% { transform: translateY(-5px) rotate(-2deg); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(3deg); }
+  75% { transform: rotate(-3deg); }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-wiggle {
+  animation: wiggle 0.5s ease-in-out infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A0AEC0;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, transform, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+button, input, textarea {
+  transition-duration: 150ms;
+}
+
+/* ============================================
+   LAYERING & Z-INDEX HIERARCHY
+   Leaflet: ~1000
+   Our Controls: 2000+
+   Modals: 3000+
+=========================================== */
+
+/* Leaflet Map Container */
+.leaflet-container {
+  background: #E8F4F8 !important;
+  z-index: 1 !important;
+}
+
+/* Leaflet Controls - ensure they don't overlap our UI */
+.leaflet-control-container {
+  z-index: 999 !important;
+}
+
+.leaflet-control-zoom {
+  border: 3px solid #2D3748 !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  background: white !important;
+  z-index: 999 !important;
+}
+
+.leaflet-control-zoom a {
+  background: #FFF !important;
+  color: #2D3748 !important;
+  border-bottom: 2px solid #2D3748 !important;
+  font-weight: bold !important;
+}
+
+.leaflet-control-zoom a:last-child {
+  border-bottom: none !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #FFE4E6 !important;
+}
+
+/* Leaflet Attribution */
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 8px !important;
+  border: 2px solid #CBD5E0 !important;
+  z-index: 999 !important;
+}
+
+/* Custom popup styles */
+.leaflet-popup-content-wrapper {
+  border: 3px solid #2D3748 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important;
+  z-index: 1000 !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  padding: 12px !important;
+  border-radius: 14px !important;
+  z-index: 1000 !important;
+}
+
+.leaflet-popup-tip {
+  background: #2D3748 !important;
+  z-index: 1000 !important;
+}
+
+/* Our custom z-index classes */
+.z-[2000] {
+  z-index: 2000 !important;
+}
+
+.z-[3000] {
+  z-index: 3000 !important;
+}
+
+/* Prevent map capture on our UI elements */
+.fixed.z-\[2000\] button,
+.fixed.z-\[2000\] > div,
+.fixed.z-\[3000\] > div {
+  position: relative;
+  z-index: inherit;
+}
