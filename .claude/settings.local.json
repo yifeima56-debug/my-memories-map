@@ -7,7 +7,13 @@
       "Bash(curl -s http://localhost:3000)",
       "Bash(curl *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pkill -f \"next start\")",
+      "Bash(npm start *)",
+      "Bash(pkill *)",
+      "WebSearch"
     ]
   }
 }

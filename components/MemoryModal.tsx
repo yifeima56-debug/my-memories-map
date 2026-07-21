@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { colors, microCopy } from '@/lib/theme'
+import Comments from './Comments'
 
 interface MemoryModalProps {
   memory: {
@@ -13,17 +14,19 @@ interface MemoryModalProps {
     media: { type: 'image' | 'video'; url: string; creator_id?: string; caption?: string; is_external?: boolean }[]
   } | null
   onClose: () => void
-  avatars?: { id: string; name: string }[]
+  avatars?: { id: string; name: string; image: string }[]
   onEdit?: (memory: any) => void
   onDelete?: (id: string) => void
   isCurrentUser?: boolean
+  currentUserId?: string
 }
 
-export default function MemoryModal({ memory, onClose, avatars = [], onEdit, onDelete, isCurrentUser = false }: MemoryModalProps) {
+export default function MemoryModal({ memory, onClose, avatars = [], onEdit, onDelete, isCurrentUser = false, currentUserId }: MemoryModalProps) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
   const [videoLoading, setVideoLoading] = useState(true)
+  const [comments, setComments] = useState<any[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -307,6 +310,18 @@ export default function MemoryModal({ memory, onClose, avatars = [], onEdit, onD
               </button>
             </div>
           )}
+
+          {/* Comments Section */}
+          <div className="pt-4 border-t-2" style={{ borderColor: colors.borderLight }}>
+            <h3 className="font-bold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+              <span>💬</span> 评论 ({comments?.length || 0})
+            </h3>
+            <Comments
+              memoryId={memory.id}
+              avatars={avatars.map(a => ({ id: a.id, name: a.name, image: a.image || 'https://via.placeholder.com/32' }))}
+              currentUserId={currentUserId}
+            />
+          </div>
         </div>
       </div>
     </div>

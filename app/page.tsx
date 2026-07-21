@@ -51,7 +51,7 @@ export default function Home() {
       // Load avatars
       const avatarsData = await fetchAvatars()
       if (avatarsData.length === 0) {
-        // Initialize default avatars
+        // Initialize default avatars only once
         const defaultAvatars = [
           { name: '法式白日梦想家', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face', color: colors.pastelPink },
           { name: '英伦故事讲述者', image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face', color: colors.pastelBlue },
@@ -73,7 +73,15 @@ export default function Home() {
         }
       } else {
         setAvatars(avatarsData)
-        setCurrentUser(avatarsData[0].id!)
+        // Keep current user if they still exist, otherwise set to first avatar
+        if (currentUser) {
+          const currentUserExists = avatarsData.find(a => a.id === currentUser)
+          if (!currentUserExists && avatarsData.length > 0) {
+            setCurrentUser(avatarsData[0].id!)
+          }
+        } else if (avatarsData.length > 0) {
+          setCurrentUser(avatarsData[0].id!)
+        }
       }
 
       // Load memories
@@ -151,11 +159,12 @@ export default function Home() {
   }) => {
     try {
       const userData = avatars.find(a => a.id === currentUser) || avatars[0]
+      const creatorId = userData?.id || avatars[0]?.id || ''
 
-      const newMediaItems = data.media.map((m) => ({
+      const newMediaItems = data.media.map((m): { type: 'image' | 'video'; url: string; creator_id: string; caption: string; is_external: boolean } => ({
         type: m.file?.type.startsWith('image/') ? 'image' : 'video',
         url: m.url,
-        creator_id: userData.id,
+        creator_id: creatorId,
         caption: data.caption,
         is_external: m.isExternal || false,
       }))
@@ -204,7 +213,7 @@ export default function Home() {
             location: data.cityName,
             caption: data.caption,
             date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-            author_id: userData.id,
+            author_id: creatorId,
             media: newMediaItems,
           }
 
@@ -238,6 +247,25 @@ export default function Home() {
       await loadData()
     } catch (error) {
       console.error('Error deleting avatar:', error)
+    }
+  }
+
+  const handleUpdateAvatar = async (id: string, updates: Partial<SupabaseAvatar>) => {
+    try {
+      await updateAvatar(id, updates)
+    } catch (error) {
+      console.error('Error updating avatar:', error)
+      alert('更新失败，请重试')
+    }
+  }
+
+  const handleCreateAvatar = async (avatar: Omit<SupabaseAvatar, 'id' | 'created_at'>) => {
+    try {
+      await createAvatar(avatar)
+      await loadData()
+    } catch (error) {
+      console.error('Error creating avatar:', error)
+      alert('创建失败，请重试')
     }
   }
 
@@ -285,12 +313,12 @@ export default function Home() {
             pins={pins}
             activeAvatar={activeAvatar}
             flyToLocation={flyToLocation}
-            avatars={avatars.map(a => ({ id: a.id, name: a.name }))}
+            avatars={avatars.filter(a => a.id).map(a => ({ id: a.id!, name: a.name, image: a.image }))}
           />
         </div>
       ) : (
         <div className="w-full h-full">
-          <MemoryList memories={filteredPins} onMemoryClick={handlePinClick} avatars={avatars.map(a => ({ id: a.id, name: a.name }))} />
+          <MemoryList memories={filteredPins} onMemoryClick={handlePinClick} avatars={avatars.filter(a => a.id).map(a => ({ id: a.id!, name: a.name }))} />
         </div>
       )}
 
@@ -307,14 +335,15 @@ export default function Home() {
           </div>
         </div>
       )}
-
       {/* Avatar Dock */}
       <AvatarDock
         avatars={avatars}
-        setAvatars={handleAvatarUpdate}
+        setAvatars={setAvatars as any}
         activeAvatar={activeAvatar}
         onAvatarClick={setActiveAvatar}
         onDeleteAvatar={handleAvatarDelete}
+        onUpdateAvatar={handleUpdateAvatar}
+        onCreateAvatar={handleCreateAvatar}
       />
 
       {/* Floating Controls */}
@@ -329,10 +358,11 @@ export default function Home() {
         <MemoryModal
           memory={selectedPin}
           onClose={() => setSelectedPin(null)}
-          avatars={avatars.map(a => ({ id: a.id, name: a.name }))}
+          avatars={avatars}
           onEdit={handleEditMemory}
           onDelete={handleDeleteMemory}
           isCurrentUser={selectedPin.authorId === currentUser}
+          currentUserId={currentUser}
         />
       )}
 

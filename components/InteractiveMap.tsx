@@ -10,7 +10,7 @@ interface InteractiveMapProps {
   pins: any[]
   activeAvatar?: string | null
   flyToLocation?: { lat: number; lng: number } | null
-  avatars?: { id: string; name: string }[]
+  avatars?: { id: string; name: string; image?: string }[]
 }
 
 // Europe bounds
@@ -29,12 +29,64 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// Create custom cute pin icon
-const createCutePinIcon = (isActive: boolean = true, avatarColor?: string) => {
+// Create custom avatar marker icon
+const createAvatarMarkerIcon = (isActive: boolean = true, avatarImage?: string, avatarColor?: string) => {
   const pinColor = avatarColor || colors.pastelPink
-  const opacity = isActive ? 1 : 0.3
-  const scale = isActive ? 1 : 0.8
+  const opacity = isActive ? 1 : 0.4
+  const scale = isActive ? 1 : 0.75
 
+  // 如果有头像图片，使用头像样式
+  if (avatarImage) {
+    return L.divIcon({
+      className: 'avatar-marker',
+      html: `
+        <div style="
+          position: relative;
+          width: 44px;
+          height: 54px;
+          opacity: ${opacity};
+          transform: scale(${scale});
+          transform-origin: center bottom;
+        ">
+          <!-- 头像圆圈 -->
+          <div style="
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 36px;
+            height: 36px;
+            background-image: url('${avatarImage}');
+            background-size: cover;
+            background-position: center;
+            border-radius: 50%;
+            border: 3px solid #2D3748;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.1);
+            z-index: 2;
+          "></div>
+          <!-- Pin 底部箭头 -->
+          <div style="
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 12px solid #2D3748;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+            z-index: 1;
+          "></div>
+        </div>
+      `,
+      iconSize: [44, 54],
+      iconAnchor: [22, 54],
+      popupAnchor: [0, -50],
+    })
+  }
+
+  // 降级：使用默认可爱 pin 样式
   return L.divIcon({
     className: 'cute-pin',
     html: `
@@ -67,6 +119,7 @@ const createCutePinIcon = (isActive: boolean = true, avatarColor?: string) => {
           border: 3px solid #2D3748;
           border-radius: 50% 50% 50% 0;
           transform: translateX(-50%) rotate(-45deg);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.15);
         "></div>
       </div>
     `,
@@ -96,16 +149,21 @@ export default function InteractiveMap({ onPinClick, onMapClick, pins, activeAva
 
     // Initialize map
     const map = L.map(mapContainerRef.current, {
-      center: [46.2276, 2.2137], // France/Europe center
+      center: [48.5, 15.0], // Europe center adjusted to show Mediterranean better
       zoom: 4,
       maxBounds: [
         [EUROPE_BOUNDS.south, EUROPE_BOUNDS.west],
         [EUROPE_BOUNDS.north, EUROPE_BOUNDS.east]
       ],
       maxBoundsViscosity: 1.0,
-      zoomControl: true,
+      zoomControl: false, // Disable default zoom control to reposition it
       attributionControl: true,
     })
+
+    // Add zoom control to bottom right to avoid overlapping with user switcher
+    L.control.zoom({
+      position: 'bottomright'
+    }).addTo(map)
 
     // Add OpenStreetMap standard tile layer with CSS filter for retro effect
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -167,15 +225,21 @@ export default function InteractiveMap({ onPinClick, onMapClick, pins, activeAva
       // Check if this pin belongs to the active avatar
       const isOwnPin = !activeAvatar || pin.authorId === activeAvatar
 
+      // 获取创建者的头像图片
+      const creator = pin.authorId ? avatars.find?.(a => a.id === pin.authorId) : null
+      const avatarImage = creator?.image
+      const avatarColor = pin.authorId ? avatarColors[pin.authorId] : undefined
+
       const marker = L.marker([pin.lat, pin.lng], {
-        icon: createCutePinIcon(
+        icon: createAvatarMarkerIcon(
           isOwnPin,
-          pin.authorId ? avatarColors[pin.authorId] : undefined
+          avatarImage,
+          avatarColor
         ),
       })
 
       // Create popup content
-      const avatarName = pin.authorId ? avatars.find?.(a => a.id === pin.authorId)?.name || '未知' : '未知'
+      const avatarName = creator?.name || '未知'
       const popupContent = `
         <div style="
           text-align: center;

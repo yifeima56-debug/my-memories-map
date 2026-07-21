@@ -30,10 +30,19 @@ export interface Memory {
 }
 
 export interface Avatar {
-  id?: string
+  id: string
   name: string
   image: string
   color: string
+  status_text?: string
+  created_at?: string
+}
+
+export interface Comment {
+  id?: string
+  memory_id: string
+  author_id: string
+  content: string
   created_at?: string
 }
 
@@ -281,5 +290,88 @@ export const deleteAvatar = async (id: string) => {
   if (error) {
     console.error('Error deleting avatar:', error)
     throw error
+  }
+}
+
+// ===== Comments Functions =====
+
+// Fetch comments for a specific memory
+export const fetchComments = async (memoryId: string): Promise<Comment[]> => {
+  console.log('Fetching comments for memoryId:', memoryId)
+  try {
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('memory_id', memoryId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching comments:', JSON.stringify(error, null, 2))
+      return []
+    }
+
+    return data || []
+  } catch (err) {
+    console.error('Unexpected error fetching comments:', JSON.stringify(err, null, 2))
+    return []
+  }
+}
+
+// Create comment
+export const createComment = async (comment: Omit<Comment, 'id' | 'created_at'>) => {
+  console.log('Creating comment with data:', comment)
+  try {
+    const { data, error } = await supabase
+      .from('comments')
+      .insert([comment])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating comment:', JSON.stringify(error, null, 2))
+      throw error
+    }
+
+    return data
+  } catch (err) {
+    console.error('Unexpected error creating comment:', JSON.stringify(err, null, 2))
+    throw err
+  }
+}
+
+// Delete comment
+export const deleteComment = async (id: string) => {
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    console.error('Error deleting comment:', error)
+    throw error
+  }
+}
+
+// Subscribe to comments for a memory
+export const subscribeToComments = (
+  memoryId: string,
+  callback: (comments: Comment[]) => void
+) => {
+  try {
+    const channel = supabase
+      .channel('comments_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comments', filter: `memory_id=eq.${memoryId}` },
+        () => fetchComments(memoryId).then(callback)
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  } catch (err) {
+    console.error('Error setting up comment subscription:', err)
+    return () => {}
   }
 }
