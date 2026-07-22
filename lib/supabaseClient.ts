@@ -9,6 +9,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 const STORAGE_BUCKET = 'our Europe memories'
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
+// 支持的视频格式
+const SUPPORTED_VIDEO_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime', // mov
+  'video/x-msvideo', // avi
+  'video/x-matroska', // mkv
+]
+
 // Database types
 export interface Memory {
   id?: string
@@ -57,51 +67,131 @@ export const uploadFile = async (
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<{ url: string; path: string }> => {
+  console.log('=== 开始上传到 Supabase Storage ===')
+  console.log('存储桶:', STORAGE_BUCKET)
+
   // 验证文件大小
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`文件大小超过 ${MAX_FILE_SIZE / 1024 / 1024 }MB 限制`)
+    const errorMsg = `文件大小超过 ${MAX_FILE_SIZE / 1024 / 1024 }MB 限制`
+    console.error('上传失败:', errorMsg)
+    throw new Error(errorMsg)
   }
 
   // 验证文件类型
   if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-    throw new Error('不支持的文件类型，仅支持图片和视频')
+    const errorMsg = '不支持的文件类型，仅支持图片和视频'
+    console.error('上传失败:', errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  // 验证视频格式
+  if (file.type.startsWith('video/')) {
+    if (!SUPPORTED_VIDEO_TYPES.includes(file.type)) {
+      const errorMsg = `不支持的视频格式: ${file.type}。支持: ${SUPPORTED_VIDEO_TYPES.join(', ')}`
+      console.error('上传失败:', errorMsg)
+      throw new Error(errorMsg)
+    }
   }
 
   // 编码文件名以确保 URL 安全
   const safeFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_').replace(/\s+/g, '_')}`
   const filePath = `uploads/${safeFileName}`
 
+  console.log('文件路径:', filePath)
+  console.log('文件信息:', { name: file.name, type: file.type, size: file.size })
+
+  // 视频文件特殊处理 - 打印更多调试信息
+  if (file.type.startsWith('video/')) {
+    console.log('=== 检测到视频文件 ===')
+    console.log('视频 MIME 类型:', file.type)
+    console.log('文件大小:', `${(file.size / 1024 / 1024).toFixed(2)}MB`)
+    console.log('支持的视频格式: mp4, webm, ogg, mov, avi, mkv')
+    console.log('预计上传时间:', `${(file.size / 1024 / 1024).toFixed(2)}MB 可能需要 10-60 秒，请耐心等待...`)
+  }
+
   try {
-    console.log('开始上传到存储桶:', STORAGE_BUCKET)
-    console.log('文件路径:', filePath)
-    console.log('文件信息:', { name: file.name, type: file.type, size: file.size })
+    // 根据文件大小调整缓存时间（视频文件缓存更久）
+    const cacheTime = file.type.startsWith('video/') ? '86400' : '3600'
 
-    // 上传到 Supabase Storage
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false,
-      })
+    console.log('=== 开始上传 ===')
+    console.log('缓存时间:', `${cacheTime}s`)
+    console.log('使用存储桶:', STORAGE_BUCKET)
 
-    if (error) {
-      console.error('Storage upload error:', error)
-      console.error('Error details:', {
-        message: error.message,
-        statusCode: error.statusCode,
-        name: error.name
-      })
-      throw error
+    // 启动模拟进度（Supabase 客户端不支持实时进度）
+    let progressInterval: NodeJS.Timeout
+    if (onProgress) {
+      let simulatedProgress = 10
+      onProgress(simulatedProgress)
+
+      // 每 1 秒增加一点进度，让用户知道上传在进行中
+      progressInterval = setInterval(() => {
+        simulatedProgress += 2
+        if (simulatedProgress < 90) {
+          onProgress(simulatedProgress)
+        }
+      }, 1000)
     }
 
-    console.log('上传成功:', data)
+    // 设置超时（5 分钟）
+    const uploadPromise = supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filePath, file, {
+        cacheControl: cacheTime,
+        upsert: false,
+        contentType: file.type,
+      })
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('上传超时，请检查网络后重试')), 5 * 60 * 1000)
+    })
+
+    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as any
+
+    // 清除进度模拟
+    if (progressInterval) {
+      clearInterval(progressInterval)
+    }
+
+    if (error) {
+      console.error('=== Supabase Storage 上传错误 ===')
+      console.error('Error Message:', error.message)
+      console.error('Error Code:', error.statusCode || 'N/A')
+      console.error('Error Name:', error.name || 'N/A')
+      console.error('完整 Error 对象:', JSON.stringify(error, null, 2))
+
+      // 根据错误代码提供更友好的错误信息
+      let userMessage = '上传失败，请重试或使用网络直链'
+      if (error.statusCode === 401) {
+        userMessage = '认证失败，请检查 Supabase 密钥配置'
+      } else if (error.statusCode === 403) {
+        userMessage = '没有权限上传到此存储桶，请检查 RLS 策略'
+      } else if (error.statusCode === 404) {
+        userMessage = `存储桶 "${STORAGE_BUCKET}" 不存在，请在 Supabase 控制台创建`
+      } else if (error.message?.includes('Bucket not found')) {
+        userMessage = `存储桶 "${STORAGE_BUCKET}" 不存在`
+      } else if (error.message?.includes('duplicate')) {
+        userMessage = '文件已存在，请重试'
+      } else if (error.message?.includes('timeout') || error.message?.includes('超时')) {
+        userMessage = '上传超时，网络可能不稳定，请重试'
+      } else if (error.statusCode === 413) {
+        userMessage = '文件太大，请压缩后重试'
+      } else if (error.message) {
+        userMessage = `上传失败: ${error.message}`
+      }
+
+      throw new Error(userMessage)
+    }
+
+    console.log('✅ 上传成功:', data)
 
     // 获取公共 URL
     const { data: publicUrlData } = supabase.storage
       .from(STORAGE_BUCKET)
       .getPublicUrl(filePath)
 
-    // 如果有进度回调，模拟上传进度（Supabase 客户端不支持实时进度）
+    console.log('公共 URL:', publicUrlData.publicUrl)
+
+    // 最终进度 100%
     if (onProgress) {
       onProgress(100)
     }
@@ -110,9 +200,15 @@ export const uploadFile = async (
       url: publicUrlData.publicUrl,
       path: filePath,
     }
-  } catch (error) {
-    console.error('Supabase Storage upload error:', error)
-    throw new Error('上传失败，请重试或使用网络直链')
+  } catch (error: any) {
+    console.error('=== 上传异常 ===')
+    console.error('Error Name:', error?.name || 'Unknown')
+    console.error('Error Message:', error?.message || 'No message')
+    console.error('Error Stack:', error?.stack || 'No stack')
+    console.error('完整 Error 对象:', JSON.stringify(error, null, 2))
+
+    const userMessage = error?.message || '上传失败，请重试或使用网络直链'
+    throw new Error(userMessage)
   }
 }
 

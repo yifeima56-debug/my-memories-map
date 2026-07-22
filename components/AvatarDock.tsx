@@ -137,9 +137,19 @@ export default function AvatarDock({ avatars, setAvatars, activeAvatar, onAvatar
     if (file && file.type.startsWith('image/')) {
       setUploadingAvatar(id)
 
+      console.log('=== 开始上传头像 ===')
+      console.log('Avatar ID:', id)
+      console.log('文件信息:', {
+        name: file.name,
+        type: file.type,
+        size: `${(file.size / 1024).toFixed(2)}KB`
+      })
+
       try {
         // Upload to Supabase Storage
         const { url } = await uploadFile(file)
+
+        console.log('✅ 头像上传成功:', url)
 
         // Update local state immediately for responsiveness
         setAvatars((prev) =>
@@ -152,11 +162,20 @@ export default function AvatarDock({ avatars, setAvatars, activeAvatar, onAvatar
 
         // Sync to Supabase database
         if (onUpdateAvatar) {
+          console.log('同步头像数据到数据库...')
           await onUpdateAvatar(id, { image: url })
+          console.log('✅ 头像数据同步成功')
         }
-      } catch (error) {
-        console.error('Failed to upload avatar image:', error)
-        alert('头像上传失败，请重试')
+      } catch (error: any) {
+        console.error('=== 头像上传失败 ===')
+        console.error('Avatar ID:', id)
+        console.error('Error Name:', error?.name || 'Unknown')
+        console.error('Error Message:', error?.message || 'No message')
+        console.error('Error Stack:', error?.stack || 'No stack')
+        console.error('完整 Error 对象:', JSON.stringify(error, null, 2))
+
+        const userMessage = error?.message || '上传失败，请重试'
+        alert(`头像上传失败: ${userMessage}`)
       } finally {
         setUploadingAvatar(null)
       }
@@ -168,6 +187,9 @@ export default function AvatarDock({ avatars, setAvatars, activeAvatar, onAvatar
       alert('请输入朋友名字')
       return
     }
+
+    console.log('=== 开始添加新头像 ===')
+    console.log('新头像名称:', newAvatarName.trim())
 
     const newId = String(Date.now())
     const color = AVATAR_COLORS[avatars.length % AVATAR_COLORS.length]
@@ -182,12 +204,26 @@ export default function AvatarDock({ avatars, setAvatars, activeAvatar, onAvatar
       const file = fileInput?.files?.[0]
 
       if (file) {
+        console.log('上传自定义头像图片...')
+        console.log('文件信息:', {
+          name: file.name,
+          type: file.type,
+          size: `${(file.size / 1024).toFixed(2)}KB`
+        })
+
         try {
           const { url } = await uploadFile(file)
           imageUrl = url
-        } catch (error) {
-          console.error('Failed to upload avatar image:', error)
-          alert('头像上传失败，请重试')
+          console.log('✅ 自定义头像上传成功:', url)
+        } catch (error: any) {
+          console.error('=== 新头像上传失败 ===')
+          console.error('Error Name:', error?.name || 'Unknown')
+          console.error('Error Message:', error?.message || 'No message')
+          console.error('Error Stack:', error?.stack || 'No stack')
+          console.error('完整 Error 对象:', JSON.stringify(error, null, 2))
+
+          const userMessage = error?.message || '上传失败，请重试'
+          alert(`头像上传失败: ${userMessage}`)
           return
         }
       }
@@ -200,17 +236,22 @@ export default function AvatarDock({ avatars, setAvatars, activeAvatar, onAvatar
       color,
     }
 
+    console.log('创建新头像对象:', newAvatar)
+
     // Update local state immediately for responsiveness
     setAvatars([...avatars, newAvatar])
 
     // Sync to Supabase
     if (onCreateAvatar) {
+      console.log('同步新头像到数据库...')
       onCreateAvatar(newAvatar)
     }
 
     setShowAddModal(false)
     setNewAvatarName('')
     setNewAvatarImage(null)
+
+    console.log('✅ 新头像添加完成')
   }
 
   const handleDeleteAvatar = (id: string) => {
