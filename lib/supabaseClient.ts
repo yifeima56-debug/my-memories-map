@@ -17,7 +17,14 @@ const SUPPORTED_VIDEO_TYPES = [
   'video/quicktime', // mov
   'video/x-msvideo', // avi
   'video/x-matroska', // mkv
+  'video/3gpp', // 手机录制常见格式
+  'video/3gpp2', // 3G2 格式
 ]
+
+// 检测是否为移动设备
+const isMobileDevice = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+}
 
 // Database types
 export interface Memory {
@@ -105,8 +112,18 @@ export const uploadFile = async (
     console.log('=== 检测到视频文件 ===')
     console.log('视频 MIME 类型:', file.type)
     console.log('文件大小:', `${(file.size / 1024 / 1024).toFixed(2)}MB`)
-    console.log('支持的视频格式: mp4, webm, ogg, mov, avi, mkv')
-    console.log('预计上传时间:', `${(file.size / 1024 / 1024).toFixed(2)}MB 可能需要 10-60 秒，请耐心等待...`)
+    console.log('支持的视频格式: mp4, webm, ogg, mov, avi, mkv, 3gp')
+
+    // 检测设备类型
+    const mobile = isMobileDevice()
+    console.log('设备类型:', mobile ? '移动设备' : '桌面设备')
+
+    // 移动设备提示更长的上传时间
+    if (mobile) {
+      console.log('⚠️ 移动设备上传较慢，请保持网络连接，预计需要 30-120 秒')
+    } else {
+      console.log('预计上传时间:', `${(file.size / 1024 / 1024).toFixed(2)}MB 可能需要 10-60 秒，请耐心等待...`)
+    }
   }
 
   try {
@@ -116,6 +133,13 @@ export const uploadFile = async (
     console.log('=== 开始上传 ===')
     console.log('缓存时间:', `${cacheTime}s`)
     console.log('使用存储桶:', STORAGE_BUCKET)
+    console.log('网络状态:', navigator.onLine ? '在线' : '离线')
+
+    // 移动设备增加超时时间
+    const isMobile = isMobileDevice()
+    const timeoutMs = isMobile && file.type.startsWith('video/') ? 10 * 60 * 1000 : 5 * 60 * 1000
+
+    console.log('超时设置:', `${timeoutMs / 1000 / 60} 分钟`)
 
     // 启动模拟进度（Supabase 客户端不支持实时进度）
     let progressInterval: NodeJS.Timeout
@@ -123,16 +147,19 @@ export const uploadFile = async (
       let simulatedProgress = 10
       onProgress(simulatedProgress)
 
-      // 每 1 秒增加一点进度，让用户知道上传在进行中
+      // 移动设备进度更慢（每 2 秒 +1%），桌面设备每秒 +2%
+      const increment = isMobile ? 1 : 2
+      const interval = isMobile ? 2000 : 1000
+
       progressInterval = setInterval(() => {
-        simulatedProgress += 2
+        simulatedProgress += increment
         if (simulatedProgress < 90) {
           onProgress(simulatedProgress)
         }
-      }, 1000)
+      }, interval)
     }
 
-    // 设置超时（5 分钟）
+    // 设置超时
     const uploadPromise = supabase.storage
       .from(STORAGE_BUCKET)
       .upload(filePath, file, {
@@ -142,7 +169,7 @@ export const uploadFile = async (
       })
 
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('上传超时，请检查网络后重试')), 5 * 60 * 1000)
+      setTimeout(() => reject(new Error(isMobile ? '移动设备上传超时，请检查网络后重试' : '上传超时，请检查网络后重试')), timeoutMs)
     })
 
     const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as any
@@ -160,7 +187,9 @@ export const uploadFile = async (
       console.error('完整 Error 对象:', JSON.stringify(error, null, 2))
 
       // 根据错误代码提供更友好的错误信息
+      const mobile = isMobileDevice()
       let userMessage = '上传失败，请重试或使用网络直链'
+
       if (error.statusCode === 401) {
         userMessage = '认证失败，请检查 Supabase 密钥配置'
       } else if (error.statusCode === 403) {
@@ -172,9 +201,19 @@ export const uploadFile = async (
       } else if (error.message?.includes('duplicate')) {
         userMessage = '文件已存在，请重试'
       } else if (error.message?.includes('timeout') || error.message?.includes('超时')) {
-        userMessage = '上传超时，网络可能不稳定，请重试'
+        if (mobile) {
+          userMessage = '移动设备上传超时，请切换到更稳定的网络（WiFi）后重试'
+        } else {
+          userMessage = '上传超时，网络可能不稳定，请重试'
+        }
       } else if (error.statusCode === 413) {
         userMessage = '文件太大，请压缩后重试'
+      } else if (error.message?.includes('network') || error.message?.includes('Network')) {
+        if (mobile) {
+          userMessage = '网络连接不稳定，请检查信号后重试'
+        } else {
+          userMessage = '网络错误，请重试'
+        }
       } else if (error.message) {
         userMessage = `上传失败: ${error.message}`
       }

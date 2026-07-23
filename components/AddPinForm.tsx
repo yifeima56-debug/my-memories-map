@@ -53,6 +53,9 @@ export default function AddPinForm({
   onLocationSearch,
   editingMemory,
 }: AddPinFormProps) {
+  // 检测是否为移动设备
+  const isMobile = typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
   const [caption, setCaption] = useState('')
   const [mediaFiles, setMediaFiles] = useState<UploadProgressState[]>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -543,6 +546,7 @@ export default function AddPinForm({
                 </p>
                 <p className="text-xs mt-1" style={{ color: colors.textLight }}>
                   照片或视频，最大 50MB
+                  {isMobile && ' • 移动设备上传较慢请耐心等待'}
                 </p>
               </>
             ) : (
@@ -553,6 +557,11 @@ export default function AddPinForm({
                 <p className="font-medium" style={{ color: colors.text }}>
                   {isUploading ? '上传中...' : `${mediaFiles.length}个文件准备好！`}
                 </p>
+                {isUploading && isMobile && (
+                  <p className="text-xs mt-1" style={{ color: colors.textLight }}>
+                    移动网络上传可能需要 1-2 分钟，请保持页面打开...
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -577,19 +586,30 @@ export default function AddPinForm({
                         {item.fileName}
                       </span>
                       <span className="text-xs" style={{ color: colors.textLight }}>
-                        {item.status === 'complete' ? '✅' : item.status === 'error' ? '❌' : `${item.progress}%`}
+                        {item.status === 'complete' ? '✅ 完成' : item.status === 'error' ? '❌ 失败' : `${item.progress}%`}
                       </span>
                     </div>
                     {item.status === 'uploading' && (
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full transition-all duration-300"
-                          style={{
-                            width: `${item.progress}%`,
-                            backgroundColor: colors.primary,
-                          }}
-                        />
-                      </div>
+                      <>
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-1">
+                          <div
+                            className="h-full transition-all duration-300 animate-pulse"
+                            style={{
+                              width: `${item.progress}%`,
+                              backgroundColor: colors.primary,
+                            }}
+                          />
+                        </div>
+                        {isMobile ? (
+                          <p className="text-xs text-center" style={{ color: colors.textLight }}>
+                            正在上传，请保持页面打开...
+                          </p>
+                        ) : (
+                          <p className="text-xs text-center" style={{ color: colors.textLight }}>
+                            正在上传，请勿关闭页面...
+                          </p>
+                        )}
+                      </>
                     )}
                     {item.status === 'error' && (
                       <p className="text-xs text-red-500 mt-1">{item.error}</p>
