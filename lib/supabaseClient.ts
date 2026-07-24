@@ -142,7 +142,7 @@ export const uploadFile = async (
     console.log('超时设置:', `${timeoutMs / 1000 / 60} 分钟`)
 
     // 启动模拟进度（Supabase 客户端不支持实时进度）
-    let progressInterval: NodeJS.Timeout
+    let progressInterval: NodeJS.Timeout | undefined = undefined
     if (onProgress) {
       let simulatedProgress = 10
       onProgress(simulatedProgress)

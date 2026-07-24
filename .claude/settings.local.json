@@ -13,7 +13,14 @@
       "Bash(pkill -f \"next start\")",
       "Bash(npm start *)",
       "Bash(pkill *)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git config *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git restore *)",
+      "Bash(git rebase *)",
+      "Bash(git reset *)",
+      "Bash(git remote *)"
     ]
   }
 }
