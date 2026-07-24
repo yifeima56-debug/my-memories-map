@@ -7,7 +7,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Storage bucket name
 const STORAGE_BUCKET = 'our Europe memories'
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
 // 支持的视频格式
 const SUPPORTED_VIDEO_TYPES = [

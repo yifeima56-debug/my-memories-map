@@ -43,7 +43,7 @@ interface AddPinFormProps {
   }
 }
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
 export default function AddPinForm({
   isOpen,
@@ -545,7 +545,7 @@ export default function AddPinForm({
                   {microCopy.uploadMedia}
                 </p>
                 <p className="text-xs mt-1" style={{ color: colors.textLight }}>
-                  照片或视频，最大 100MB
+                  照片或视频，最大 50MB
                   {isMobile && ' • 移动设备上传较慢请耐心等待'}
                 </p>
               </>
