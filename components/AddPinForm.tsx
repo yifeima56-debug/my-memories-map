@@ -22,6 +22,13 @@ interface ExternalMedia {
   youtubeId?: string
 }
 
+interface SearchSuggestion {
+  lat: number
+  lon: number
+  displayName: string
+  cityName: string
+}
+
 interface AddPinFormProps {
   isOpen: boolean
   onClose: () => void
@@ -63,9 +70,14 @@ export default function AddPinForm({
   const [searchQuery, setSearchQuery] = useState('')
   const [searchedLocation, setSearchedLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [searchedCityName, setSearchedCityName] = useState('')
+  const [isSearchingCity, setIsSearchingCity] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const [externalUrl, setExternalUrl] = useState('')
   const [externalMedia, setExternalMedia] = useState<ExternalMedia[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const initialLocationRef = useRef<{ lat: number; lng: number } | null>(null)
 
   // 初始化编辑模式
@@ -101,13 +113,31 @@ export default function AddPinForm({
       setSearchQuery('')
       setSearchedLocation(null)
       setSearchedCityName('')
+      setIsSearchingCity(false)
+      setSearchError('')
+      setSearchSuggestions([])
+      setShowSuggestions(false)
       setCaption('')
       setMediaFiles([])
       setExternalMedia([])
       setExternalUrl('')
       initialLocationRef.current = null
+      // 清理 timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+        searchTimeoutRef.current = null
+      }
     }
   }, [isOpen])
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // 反向地理编码
   useEffect(() => {
@@ -313,32 +343,67 @@ export default function AddPinForm({
     setExternalUrl('')
   }
 
+  // 获取搜索建议
+  const fetchSearchSuggestions = async (query: string) => {
+    if (!query.trim()) {
+      setSearchSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+
+    setIsSearchingCity(true)
+    setSearchError('')
+
+    try {
+      const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`)
+      const data = await response.json()
+
+      if (response.ok && data.results && data.results.length > 0) {
+        setSearchSuggestions(data.results)
+        setShowSuggestions(true)
+      } else {
+        setSearchSuggestions([])
+        setShowSuggestions(false)
+        // 只在有建议时显示错误
+        if (data.suggestions) {
+          setSearchError(data.suggestions[0] || '未找到该地点')
+        }
+      }
+    } catch (error) {
+      console.error('Search failed:', error)
+      setSearchSuggestions([])
+      setShowSuggestions(false)
+      setSearchError('搜索失败，请检查网络连接')
+    } finally {
+      setIsSearchingCity(false)
+    }
+  }
+
+  // 选择搜索建议
+  const selectSuggestion = (suggestion: SearchSuggestion) => {
+    setSearchedLocation({ lat: suggestion.lat, lng: suggestion.lon })
+    setSearchedCityName(suggestion.cityName || suggestion.displayName)
+    setSearchQuery(suggestion.cityName || suggestion.displayName)
+    setShowSuggestions(false)
+
+    // 通知父组件飞行到该位置
+    if (onLocationSearch) {
+      onLocationSearch(suggestion.lat, suggestion.lon)
+    }
+  }
+
   const handleCitySearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
     if (!searchQuery.trim()) return
 
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`
-      )
-      const results = await response.json()
-
-      if (results && results.length > 0) {
-        const { lat, lon, display_name } = results[0]
-        const latNum = parseFloat(lat)
-        const lngNum = parseFloat(lon)
-
-        setSearchedLocation({ lat: latNum, lng: lngNum })
-        setSearchedCityName(display_name || searchQuery)
-
-        // 通知父组件飞行到该位置
-        if (onLocationSearch) {
-          onLocationSearch(latNum, lngNum)
-        }
-      }
-    } catch (error) {
-      console.error('City search failed:', error)
+    // 如果有搜索建议，选择第一个
+    if (searchSuggestions.length > 0) {
+      selectSuggestion(searchSuggestions[0])
+      return
     }
+
+    // 否则执行搜索
+    await fetchSearchSuggestions(searchQuery)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -415,21 +480,99 @@ export default function AddPinForm({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
           {/* City Search */}
-          <div>
+          <div className="relative">
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value
+                setSearchQuery(value)
+                setSearchError('')
+
+                // 清除之前的 timeout
+                if (searchTimeoutRef.current) {
+                  clearTimeout(searchTimeoutRef.current)
+                }
+
+                // 防抖搜索建议
+                if (value.trim()) {
+                  searchTimeoutRef.current = setTimeout(() => {
+                    fetchSearchSuggestions(value)
+                  }, 300)
+                } else {
+                  setSearchSuggestions([])
+                  setShowSuggestions(false)
+                }
+              }}
               onKeyDown={handleCitySearch}
+              onFocus={() => {
+                if (searchSuggestions.length > 0) {
+                  setShowSuggestions(true)
+                }
+              }}
               placeholder="去过哪儿？输入城市直达..."
               disabled={isUploading}
+              autoComplete="off"
               className="w-full px-4 py-3 border-3 rounded-xl outline-none focus:ring-4 transition-all disabled:opacity-50"
               style={{
-                borderColor: colors.border,
+                borderColor: searchError ? colors.primary : colors.border,
                 backgroundColor: colors.pastelBlue,
                 color: colors.text,
               }}
             />
+
+            {/* Search Suggestions Dropdown */}
+            {showSuggestions && searchSuggestions.length > 0 && !searchedLocation && (
+              <div
+                className="absolute w-full mt-1 bg-white border-3 rounded-xl shadow-lg z-50 max-h-64 overflow-y-auto"
+                style={{ borderColor: colors.border }}
+              >
+                {searchSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => selectSuggestion(suggestion)}
+                    className="w-full px-4 py-3 text-left hover:bg-opacity-80 transition-colors border-b-2 last:border-b-0"
+                    style={{
+                      borderColor: colors.borderLight,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = colors.pastelMint + '20'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                    }}
+                  >
+                    <div className="font-medium" style={{ color: colors.text }}>
+                      {suggestion.cityName}
+                    </div>
+                    <div className="text-xs truncate" style={{ color: colors.textLight }}>
+                      {suggestion.displayName}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Search status */}
+            {isSearchingCity && (
+              <div className="mt-2 flex items-center gap-2 text-sm" style={{ color: colors.textLight }}>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-500"></div>
+                <span>正在搜索...</span>
+              </div>
+            )}
+            {/* Search error */}
+            {searchError && !showSuggestions && (
+              <div className="mt-2 text-sm" style={{ color: colors.primary }}>
+                {searchError}
+              </div>
+            )}
+            {/* Search hint */}
+            {!isSearchingCity && !searchError && !searchedLocation && !showSuggestions && (
+              <div className="mt-2 text-xs" style={{ color: colors.textLight }}>
+                💡 支持中文搜索：北京、上海、巴黎、东京等
+              </div>
+            )}
           </div>
 
           {/* Location Display */}
